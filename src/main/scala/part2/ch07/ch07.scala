@@ -54,13 +54,40 @@ object Par {
     */
   def asyncF[A,B](f: A => B): A => Par[B] = a => lazyUnit(f(a))
 
-//  def fork[A](a: => Par[A]): Par[A] = ???
+  // This is the simplest and most natural implementation of `fork`, but there are some problems with it--for one, the outer `Callable` will block waiting for the "inner" task to complete. Since this blocking occupies a thread in our thread pool, or whatever resource backs the `ExecutorService`, this implies that we're losing out on some potential parallelism. Essentially, we're using two threads when one should suffice. This is a symptom of a more serious problem with the implementation, and we will discuss this later in the chapter.
+  //  def fork[A](a: => Par[A]): Par[A] = ???
   def fork[A](a: => Par[A]): Par[A] = es => es.submit(
     new Callable[A] {
       def call = a(es).get
     })
 //  def run[A](a: Par[A]): A = ??? // changed signature to ...
-  def run[A](s: ExecutorService)(a: Par[A]): A = ???
+//  def run[A](s: ExecutorService)(a: Par[A]): A = ???
+  def run[A](s: ExecutorService)(a: Par[A]): Future[A] = a(s)
+
+  def map[A,B](pa: Par[A])(f: A => B): Par[B] =
+    map2(pa, unit(()))((a,_) => f(a))
+
+  def sortPar(parList: Par[List[Int]]): Par[List[Int]] = map(parList)(_.sorted)
+
+  def equal[A](e: ExecutorService)(p: Par[A], p2: Par[A]): Boolean =
+    p(e).get == p2(e).get
+
+  def delay[A](fa: => Par[A]): Par[A] =
+    es => fa(es)
+
+  def choice[A](cond: Par[Boolean])(t: Par[A], f: Par[A]): Par[A] =
+    es =>
+      if (run(es)(cond).get) t(es) // Notice we are blocking on the result of `cond`.
+      else f(es)
+
+  import language.implicitConversions
+  /* Gives us infix syntax for `Par`. */
+  implicit def toParOps[A](p: Par[A]): ParOps[A] = new ParOps(p)
+
+  class ParOps[A](p: Par[A]) {
+
+
+  }
 }
 
 class Sums {
