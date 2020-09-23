@@ -1,7 +1,8 @@
 package part2.ch09
 
-trait Parsers[ParseError, Parser[+_]] { self =>
-  def run[A](p: Parser[A])(input: String): Either[ParseError,A]
+//trait Parsers[ParseError, Parser[+_]] { self =>
+trait Parsers[Parser[+_]] { self =>
+  def run[ParseError, A](p: Parser[A])(input: String): Either[ParseError,A]
 
   //  Our char function should satisfy an obvious law—for any Char, c,
   //  run(char(c))(c.toString) == Right(c)
@@ -21,6 +22,11 @@ trait Parsers[ParseError, Parser[+_]] { self =>
 //  def product[A,B](p: Parser[A], p2: Parser[B]): Parser[(A,B)]
   def product[A,B](p: Parser[A], p2: => Parser[B]): Parser[(A,B)]
 
+  def label[A](msg: String)(p: Parser[A]): Parser[A] // page 161
+  def errorLocation[ParseError](e: ParseError): Location
+  def errorMessage[ParseError](e: ParseError): String
+  def scope[A](msg: String)(p: Parser[A]): Parser[A] // page 163
+  def attempt[A](p: Parser[A]): Parser[A] //  It should satisfy something like this: attempt(p flatMap (_ => fail)) or p2 == p2
 
   implicit def string(s: String): Parser[String]
   implicit def operators[A](p: Parser[A]): ParserOps[A] = ParserOps[A](p)
@@ -117,7 +123,28 @@ trait Parsers[ParseError, Parser[+_]] { self =>
 
 //      run(succeed(a))(s) == Right(a)
     char('a').many.slice.map(_.size) ** char('b').many1.slice.map(_.size)
+
+//  def labelLaw[A](p: Parser[A], inputs: SGen[String]): Prop =
+//    forAll(inputs ** Gen.string) { case (input, msg) =>
+//      run(label(msg)(p))(input) match {
+//        case Left(e) => errorMessage(e) == msg
+//        case _ => true
+//      }
+    }
+
+  val p0: Parser[((String, List[String]), String)] =
+    label("first magic word")("abra") ** " ".many **
+    label("second magic word")("cadabra")
+
+  val spaces: Parser[List[String]] = " ".many
+  val p1: Parser[((String, List[String]), String)] = scope("magic spell") {
+    "abra" ** spaces ** "cadabra" }
+  val p2: Parser[((String, List[String]), String)] = scope("gibberish") { "abba" ** spaces ** "babba"
   }
+  val p: Parser[((String, List[String]), String)] = p1 or p2
+
+//  val q = (attempt("abra" ** spaces ** "abra") ** "cadabra") or ( "abra" ** spaces "cadabra!")
+
 }
 
 //def jsonParser[Err,Parser[+_]](P: Parsers[Err,Parser]): Parser[JSON] = {
@@ -164,4 +191,128 @@ object JSON {
   * give the programmer a way to specify which of the two errors is reported?
   *
   * PAGE 161
+  *
+  * EXERCISE 9.11
+  * Can you think of any other primitives that might be useful for
+  * letting the programmer specify what error(s) in an or chain get reported?
+  *
+  * EXERCISE 9.12
+  * Hard: In the next section, we’ll work through a representation for Parser and imple-
+  * ment the Parsers interface using this representation. But before we do that, try to
+  * come up with some ideas on your own. This is a very open-ended design task, but the
+  * algebra we’ve designed places strong constraints on possible representations. You
+  * should be able to come up with a simple, purely functional representation of Parser
+  * that can be used to implement the Parsers interface
+  * Your code will likely look something like this:
+  * class MyParser[+A](...) { ... }
+  * object MyParsers extends Parsers[MyParser] {
+  *   // implementations of primitives go here
+  * }
+  * Replace MyParser with whatever data type you use for representing your parsers.
+  * When you have something you’re satisfied with, get stuck, or want some more ideas, keep reading.
   */
+
+case class Location(input: String, offset: Int = 0) {
+  lazy val line = input.slice(0,offset+1).count(_ == '\n') + 1
+  lazy val col = input.slice(0,offset+1).lastIndexOf('\n') match {
+    case -1 => offset + 1
+    case lineStart => offset - lineStart
+  }
+
+  def toError(msg: String): ParseError = ParseError(List((this, msg)))
+  def advanceBy(n: Int): Location = copy(offset = offset+n)
+
+}
+case class ParseError(stack: List[(Location, String)]) extends AnyVal {
+  def push(loc: Location, msg: String): ParseError = copy(stack = (loc,msg) :: stack)
+  def label[A](s: String): ParseError = ParseError(latestLoc.map((_,s)).toList)
+  def latestLoc: Option[Location] = latest map (_._1)
+  def latest: Option[(Location,String)] = stack.lastOption
+}
+trait Result[+A] {
+  def mapError(f: ParseError => ParseError): Result[A] = this match {
+    case Failure(e, b) => Failure(f(e), b)
+    case _ => this
+  }
+  def uncommit: Result[A] = this match {
+    case Failure(e,true) => Failure(e,false) case _ => this
+  }
+  def addCommit(isCommitted: Boolean): Result[A] = this match {
+    case Failure(e,c) => Failure(e, c || isCommitted)
+    case _ => this
+  }
+  def advanceSuccess(n: Int): Result[A] = this match {
+    case Success(a,m) => Success(a,n+m)
+    case _ => this
+  }
+}
+case class Success[+A](get: A, charsConsumed: Int) extends Result[A]
+case class Failure(get: ParseError, isCommitted: Boolean) extends Result[Nothing]
+object OnePossibleImplementation {
+//  type Parser[+A] = String => Either[ParseError,A]
+  type Parser[+A] = Location => Result[A]
+
+//  def string[A](s: String): Parser[A] =
+//    (input: String) =>
+//      if (input.startsWith(s)) ??? //Right(s)
+//      else
+//        ??? //Left(Location(input).toError("Expected: " + s))
+
+  def run[A](p: Parser[A])(input: String): Either[ParseError,A] = ???
+
+  /**
+    * EXERCISE 9.13
+    * Implement string, regex, succeed, and slice for this initial representation of Parser.
+    * Note that slice is less efficient than it could be,
+    * since it must still construct a value only to discard it.
+    * We’ll return to this later.
+    * */
+  def scope[A](msg: String)(p: Parser[A]): Parser[A] = s => ??? //p(s).mapError(x => x.push(s.loc,msg))
+  def label[A](msg: String)(p: Parser[A]): Parser[A] = s => p(s).mapError(_.label(msg))
+/**
+  * EXERCISE 9.14
+  * page 168
+  * Revise your implementation of string to use scope and/or label to provide a mean- ingful error message in the event of an error.
+  * */
+
+  def attempt[A](p: Parser[A]): Parser[A] = s => p(s).uncommit
+
+  def or[A](x: Parser[A], y: => Parser[A]): Parser[A] = s => x(s) match {
+    case Failure(e,false) => y(s)
+    case r => r
+  }
+
+//  9.6.5 Context-sensitive parsing
+//  Listing 9.3 Using addCommit to make sure our parser is committed
+  def flatMap[A, B](f: Parser[A])(g: A => Parser[B]): Parser[B] =
+    s => f(s) match {
+      case Success(a, n) => g(a)(s.advanceBy(n))
+        .addCommit(n != 0)
+        .advanceSuccess(n)
+      case e@Failure(_, _) => e
+    }
+
+  /**
+    * EXERCISE 9.15
+    * Implement the rest of the primitives, including run, using this representation of
+    * Parser, and try running your JSON parser on various inputs.
+    *
+    * EXERCISE 9.16
+    * Come up with a nice way of formatting a ParseError for human consumption.
+    * There are a lot of choices to make, but a key insight is that we typically want to combine
+    * or group labels attached to the same location when presenting the error as a String for display.
+    *
+    *
+    * EXERCISE 9.17
+    * Hard: The slice combinator is still less efficient than it could be.
+    * For instance, many(char('a')).slice will still build up a List[Char], only to discard it.
+    * Can you think of a way of modifying the Parser representation to make slicing more efficient?
+    *
+    * EXERCISE 9.18
+    * Some information is lost when we combine parsers with the or combinator.
+    * If both parsers fail, we’re only keeping the errors from the second parser.
+    * But we might want to show both error messages,
+    * or choose the error from whichever branch got furthest without failing.
+    * Change the representation of ParseError to keep track of errors that occurred in other branches of the parser.
+    * */
+}
