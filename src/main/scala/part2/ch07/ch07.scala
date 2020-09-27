@@ -4,8 +4,11 @@ import java.util.concurrent._
 
 object Par {
   /**
-    * try to come up with representations for Par that make it possible to implement the functions of our API.
-    */
+    *
+    * EXERCISE 7.2
+    * Before continuing, try to come up with representations for Par
+    * that make it possible to implement the functions of our API.
+    * */
   type Par[A] = ExecutorService => Future[A]
 
 //  def unit[A](a: => A): Par[A] = Par(a)
@@ -36,12 +39,6 @@ object Par {
       UnitFuture(f(af.get, bf.get))
     }
 
-  /**
-    *
-    * EXERCISE 7.2
-    * Before continuing, try to come up with representations for Par
-    * that make it possible to implement the functions of our API.
-    * */
   class ExecutorService {
     def submit[A](a: Callable[A]): Future[A] = ???
   }
@@ -103,9 +100,14 @@ object Par {
 
   /**
     * EXERCISE 7.5
-    * Hard: Write this function, called sequence. No additional primitives are required. Do not call run.
+    * Hard: Write this function, called sequence.
+    * No additional primitives are required.
+    * Do not call run.
     */
-  def sequence[A](ps: List[Par[A]]): Par[List[A]] = ???
+  def sequence[A](ps: List[Par[A]]): Par[List[A]] =  ps match {
+    case Nil     => lazyUnit(Nil)
+    case x :: xs => ???
+  }
 
   /**
     * EXERCISE 7.6
