@@ -127,6 +127,10 @@ case class Falsified(failure: FailedCase,
   def isFalsified = true
 }
 
+case object Proved extends Result {
+  override def isFalsified: Boolean = false
+}
+
 object Asdf {
   type TestCases = Int
 //  type Result = Either[(FailedCase, SuccessCount), SuccessCount]
@@ -165,21 +169,111 @@ object Asdf {
     */
   def &&(p: Prop): Prop = ???
   def ||(p: Prop): Prop = ???
+ }
 
+object QWER {
+  type TestCases = Int
 //  8.3 Test case minimization // page 134
-
+case class SGen[A](forSize: Int => Gen[A])
   /**
     * EXERCISE 8.10
     * Implement helper functions for converting Gen to SGen. You can add this as a method on Gen.
-    * def unsized: SGen[A]
-    *
+    */
+  def unsized[A]: SGen[A] = ???
+
+  /**
     * EXERCISE 8.11
     * Not surprisingly,
     * SGen at a minimum supports many of the same operations as Gen,
-    * and the implementations are rather mechanical. Define some convenience functions
-    *
+    * and the implementations are rather mechanical.
+    * Define some convenience functions
+    */
+
+  /**
     * EXERCISE 8.12
     * Implement a listOf combinator that doesn’t accept an explicit size. It should return an SGen instead of a Gen. The implementation should generate lists of the requested size.
-    * def listOf[A](g: Gen[A]): SGen[List[A]]
     */
+  def listOf[A](g: Gen[A]): SGen[List[A]] = ???
+
+  type MaxSize = Int
+  case class Prop(run: (MaxSize,TestCases,RNG) => Result)
+//  def forAll[A](g: SGen[A])(f: A => Boolean): Prop = forAll(g(_))(f)
+//
+  def forAll[A](g: Int => Gen[A])(f: A => Boolean): Prop = ??? ///Prop {
+//    (max, n, rng) =>
+//      val casesPerSize = (n + (max - 1)) / max
+//      val props: Stream[Prop] =
+//        Stream.from(0).take((n min max) + 1).map(i => forAll(g(i))(f))
+//      val prop: Prop =
+//        props.map(p => Prop { (max, _, rng) =>
+//          p.run(max, casesPerSize, rng)
+//        }).toList.reduce(_ && _)
+//      prop.run(max, n, rng)
+//  }
+
+//  val smallInt = Gen.choose(-10,10)
+//    val maxProp = forAll(listOf(smallInt)) { ns =>
+//      val max = ns.max
+//      !ns.exists(_ > max) }
+
+  import part1.ch06.SimpleRNG
+
+  /**
+    * EXERCISE 8.13
+    * Define listOf1 for generating nonempty lists,
+    * and then update your specification of max to use this generator.
+    */
+
+  /**
+    * EXERCISE 8.14
+    * Write a property to verify the behavior of List.sorted (API docs link: http://mng.bz/ 7 Pz86),
+    * which you can use to sort (among other things) a List[Int].
+    * For instance, List(2,1,3).sorted is equal to List(1,2,3).
+    */
+
+  def run(p: Prop,
+          maxSize: Int = 100,
+          testCases: Int = 100,
+          rng: RNG = SimpleRNG(System.currentTimeMillis)): Unit =
+    p.run(maxSize, testCases, rng) match {
+    case Falsified(msg, n) =>
+      println(s"! Falsified after $n passed tests:\n $msg")
+    case Passed =>
+      println(s"+ OK, passed $testCases tests.")
+    case Proved =>
+      println(s"+ OK, proved property.")
+  }
+
+  /**
+    * EXERCISE 8.15
+    * Hard: A check property is easy to prove conclusively because the test just involves eval-
+    * uating the Boolean argument. But some forAll properties can be proved as well.
+    * For instance, if the domain of the property is Boolean, then there are really only two cases to test.
+    * If a property forAll(p) passes for both p(true) and p(false), then it is proved.
+    * Some domains (like Boolean and Byte) are so small that they can be exhaus- tively checked.
+    * And with sized generators, even infinite domains can be exhaustively checked up to the maximum size.
+    *
+    * Automated testing is very useful, but it’s even better if we can automatically prove our code correct.
+    * Modify our library to incorporate this kind of exhaustive checking of finite domains and sized generators.
+    * This is less of an exer- cise and more of an extensive, open-ended design project.
+    */
+}
+
+object TestingPar { // page 140
+//  import part2.ch07.Par
+//  import part2.ch07.Par._
+//  val p2 = Prop.check {
+//    val p = Par.map(Par.unit(1))(_ + 1)
+//    val p2 = Par.unit(2)
+//    p(ES).get == p2(ES).get
+//  }
+//
+//  def equal[A](p: Par[A], p2: Par[A]): Par[Boolean] = Par.map2(p,p2)(_ == _)
+//
+//  val p3 = check {
+//    equal(
+//      Par.map(Par.unit(1))(_ + 1),
+//      Par.unit(2))
+//    (ES).get
+//  }
 }
